@@ -2,6 +2,7 @@
 """Serial data reader for Raspberry Pi 3 - RPL-UDP protocol."""
 
 import json
+import re
 import serial
 import yaml
 from pathlib import Path
@@ -29,11 +30,22 @@ def create_serial_connection(config: dict) -> serial.Serial:
 
 
 def parse_message(data: bytes) -> dict | None:
-    """Parse JSON message from serial data."""
+    """Parse JSON message from serial data.
+
+    Handles both raw JSON and log-formatted messages like:
+    [INFO: App       ] Rx '{"t":"a","s":0,"r":-28}' rssi=-26 from ...
+    """
     try:
         text = data.decode("utf-8").strip()
         if not text:
             return None
+
+        # Try to extract JSON from log format: Rx '{"t":...}'
+        match = re.search(r"Rx '(\{[^']+\})'", text)
+        if match:
+            return json.loads(match.group(1))
+
+        # Fallback: try parsing as raw JSON
         return json.loads(text)
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
