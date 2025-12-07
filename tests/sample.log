@@ -1,0 +1,14 @@
+[INFO: App       ] Rx '{"t":"b","s":5,"b":0}' rssi=-41 from fd00::212:4b00:1cab:6bc0
+[INFO: App       ] Server button press received!
+[INFO: App       ] Tx keepalive seq=111 rssi=-41 bat=2746mV to fd00::212:4b00:1cab:6bc0
+
+[INFO: App       ] Tx keepalive seq=0 rssi=0 tmp=0.-1 hum=0.-1 bat=3015mV
+[INFO: App       ] Rx '{"t":"a","s":0,"r":-28}' rssi=-26 from fd00::212:4b00:1cab:6bc0
+[INFO: App       ] Server heard us at -28 dBm
+
+[INFO: App       ] Tx keepalive seq=1 rssi=-26 tmp=0.-1 hum=0.-1 bat=3015mV
+[INFO: App       ] Rx '{"t":"a","s":1,"r":-27}' rssi=-25 from fd00::212:4b00:1cab:6bc0
+[INFO: App       ] Server heard us at -27 dBm
+
+[INFO: App       ] Tx keepalive seq=2 rssi=-25 tmp=0.-1 hum=0.-1 bat=3015mV
+[INFO: App       ] Rx '{"t":"a","s":2,"r":-30}' rssi=-26 from fd00::212:4b00:1cab:6bc0
