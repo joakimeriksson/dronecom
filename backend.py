@@ -39,6 +39,58 @@ packet_stats: dict[str, Any] = {
 # RSSI history (last 60 readings)
 rssi_history: list[dict] = []
 
+# Device list from RPL routes
+devices: dict[str, dict[str, Any]] = {}
+# Pattern for parsing routes output
+routes_pattern = re.compile(
+    r"-- (fd00::[0-9a-f:]+)(?:\s+to\s+(fd00::[0-9a-f:]+))?"
+    r"(?:\s+\(DODAG root\))?\s+\(lifetime:\s+(\w+|\d+\s+seconds)\)"
+)
+
+
+def parse_routes_line(line: str) -> dict | None:
+    """Parse a single route line from shell output."""
+    match = routes_pattern.search(line)
+    if match:
+        addr = match.group(1)
+        parent = match.group(2)
+        lifetime_str = match.group(3)
+
+        if lifetime_str == "infinite":
+            lifetime = -1
+            is_root = True
+        else:
+            lifetime = int(lifetime_str.split()[0])
+            is_root = False
+
+        return {
+            "address": addr,
+            "parent": parent,
+            "lifetime": lifetime,
+            "is_root": is_root,
+        }
+    return None
+
+
+def update_device_list(route_info: dict) -> None:
+    """Update device list with route information."""
+    addr = route_info["address"]
+    if addr not in devices:
+        devices[addr] = {
+            "address": addr,
+            "parent": route_info["parent"],
+            "lifetime": route_info["lifetime"],
+            "is_root": route_info["is_root"],
+            "first_seen": asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0,
+            "last_seen": 0,
+            "stats": {"received": 0, "first_seq": None, "last_seq": None},
+        }
+
+    devices[addr]["parent"] = route_info["parent"]
+    devices[addr]["lifetime"] = route_info["lifetime"]
+    devices[addr]["is_root"] = route_info["is_root"]
+    devices[addr]["last_seen"] = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
+
 
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file."""
@@ -95,10 +147,19 @@ def update_packet_stats(seq: int) -> dict:
         packet_stats["received"] = 1
         packet_stats["expected"] = 1
     else:
-        packet_stats["received"] += 1
-        if seq > packet_stats["last_seq"]:
+        # Detect sequence number reset (device reboot)
+        # If seq is much lower than last_seq, assume the device rebooted
+        if seq < packet_stats["last_seq"] - 10:
+            print(f"[STATS] Sequence reset detected (got {seq}, expected ~{packet_stats['last_seq']}). Resetting stats.")
+            packet_stats["first_seq"] = seq
             packet_stats["last_seq"] = seq
-        packet_stats["expected"] = packet_stats["last_seq"] - packet_stats["first_seq"] + 1
+            packet_stats["received"] = 1
+            packet_stats["expected"] = 1
+        else:
+            packet_stats["received"] += 1
+            if seq > packet_stats["last_seq"]:
+                packet_stats["last_seq"] = seq
+            packet_stats["expected"] = packet_stats["last_seq"] - packet_stats["first_seq"] + 1
 
     if packet_stats["expected"] > 0:
         packet_stats["prr"] = round(100.0 * packet_stats["received"] / packet_stats["expected"], 1)
@@ -156,6 +217,16 @@ def format_sensor_data(msg: dict) -> dict:
         }
 
     elif msg.get("type") == "log":
+        # Check for routes output
+        message = msg.get("message", "")
+        route_info = parse_routes_line(message)
+        if route_info:
+            update_device_list(route_info)
+            return {
+                "type": "route",
+                "route": route_info,
+                "devices": list(devices.values()),
+            }
         return msg
 
     return {"type": "unknown", "raw": msg}
@@ -261,6 +332,7 @@ async def websocket_endpoint(websocket: WebSocket):
         "latest": latest_data,
         "stats": packet_stats,
         "rssi_history": rssi_history,
+        "devices": list(devices.values()),
     }
     await websocket.send_text(json.dumps(init_data))
 
@@ -273,6 +345,11 @@ async def websocket_endpoint(websocket: WebSocket):
             # Handle commands
             if msg.get("cmd") == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
+            elif msg.get("cmd") == "routes":
+                # Request routes from RPL root
+                if ser and ser.is_open:
+                    ser.write(b"routes\n")
+                    print("[SEND] routes")
             elif msg.get("cmd") == "send":
                 # Send text to serial port
                 text = msg.get("text", "")

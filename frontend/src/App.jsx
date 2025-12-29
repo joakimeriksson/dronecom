@@ -18,6 +18,7 @@ function App() {
     button_count: 0,
   })
   const [rssiHistory, setRssiHistory] = useState([])
+  const [devices, setDevices] = useState([])
   const [logs, setLogs] = useState([])
   const [command, setCommand] = useState('')
   const [commandHistory, setCommandHistory] = useState([])
@@ -90,6 +91,9 @@ function App() {
         if (msg.rssi_history) {
           setRssiHistory(msg.rssi_history)
         }
+        if (msg.devices) {
+          setDevices(msg.devices)
+        }
         addLog('system', 'State restored from backend')
         break
 
@@ -126,6 +130,13 @@ function App() {
         addLog('ack', `ACK seq=${msg.seq} rssi=${msg.rssi}dBm`)
         break
 
+      case 'route':
+        if (msg.devices) {
+          setDevices(msg.devices)
+        }
+        addLog('route', `Device: ${msg.route?.address}${msg.route?.is_root ? ' (root)' : ''}`)
+        break
+
       case 'log':
         addLog('log', msg.message)
         break
@@ -146,6 +157,17 @@ function App() {
     }
   }, [logs])
 
+  // Auto-refresh routes every 30s
+  useEffect(() => {
+    if (!connected) return
+    const interval = setInterval(() => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ cmd: 'routes' }))
+      }
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [connected])
+
   const sendCommand = (cmd) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && cmd.trim()) {
       wsRef.current.send(JSON.stringify({ cmd: 'send', text: cmd.trim() }))
@@ -154,6 +176,19 @@ function App() {
       setHistoryIndex(-1)
       setCommand('')
     }
+  }
+
+  const requestRoutes = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ cmd: 'routes' }))
+      addLog('cmd', '> routes')
+    }
+  }
+
+  const shortenAddr = (addr) => {
+    if (!addr) return '--'
+    const parts = addr.split(':')
+    return parts.slice(-2).join(':')
   }
 
   const handleKeyDown = (e) => {
@@ -238,6 +273,37 @@ function App() {
           <h2>Button Presses</h2>
           <span className="value">{stats.button_count}</span>
         </div>
+      </div>
+
+      <div className="devices-section">
+        <div className="section-header">
+          <h2>Devices ({devices.length})</h2>
+          <button onClick={requestRoutes} disabled={!connected}>Refresh</button>
+        </div>
+        {devices.length > 0 ? (
+          <table className="devices-table">
+            <thead>
+              <tr>
+                <th>Address</th>
+                <th>Parent</th>
+                <th>Lifetime</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devices.map((device, i) => (
+                <tr key={i} className={device.is_root ? 'root' : ''}>
+                  <td title={device.address}>{shortenAddr(device.address)}</td>
+                  <td title={device.parent}>{shortenAddr(device.parent)}</td>
+                  <td>{device.lifetime === -1 ? '∞' : `${device.lifetime}s`}</td>
+                  <td>{device.is_root ? 'Root (connected)' : 'Node'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="no-devices">No devices. Click Refresh to query routes.</p>
+        )}
       </div>
 
       <div className="chart-section">
