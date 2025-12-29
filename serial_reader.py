@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Serial data reader for Raspberry Pi 3 - RPL-UDP protocol."""
 
+import argparse
 import json
 import re
 import serial
@@ -62,12 +63,38 @@ def read_loop(ser: serial.Serial):
             if msg:
                 process_message(msg)
             elif data.strip():
-                print(f"[RAW] {data.hex()}")
+                try:
+                    print(data.decode("utf-8").rstrip())
+                except UnicodeDecodeError:
+                    print(f"[RAW] {data.hex()}")
 
 
 def main():
-    config_path = Path(__file__).parent / "config.yaml"
+    parser = argparse.ArgumentParser(description="Serial data reader for RPL-UDP protocol")
+    parser.add_argument(
+        "-c", "--config",
+        choices=["pi", "mac"],
+        default="pi",
+        help="Config to use: 'pi' (default) or 'mac'"
+    )
+    parser.add_argument(
+        "-p", "--port",
+        help="Override serial port (e.g., /dev/tty.usbmodem0001)"
+    )
+    args = parser.parse_args()
+
+    # Select config file
+    config_dir = Path(__file__).parent
+    if args.config == "mac":
+        config_path = config_dir / "config-mac.yaml"
+    else:
+        config_path = config_dir / "config.yaml"
+
     config = load_config(config_path)
+
+    # Override port if specified
+    if args.port:
+        config["serial"]["port"] = args.port
 
     print(f"Connecting to {config['serial']['port']} at {config['serial']['baudrate']} baud...")
 

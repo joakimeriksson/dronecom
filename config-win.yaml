@@ -1,5 +1,5 @@
 serial:
-  port: "/dev/serial0"
+  port: "COM3"
   baudrate: 115200
   bytesize: 8
   parity: "N"

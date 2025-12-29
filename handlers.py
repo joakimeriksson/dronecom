@@ -13,6 +13,8 @@ def handle_keepalive(msg: dict):
         parts.append(f"hum={msg['hum'] / 100.0:.1f}%")
     if "bat" in msg:
         parts.append(f"bat={msg['bat'] / 1000.0:.2f}V")
+    if "lgt" in msg:
+        parts.append(f"light={msg['lgt'] / 100.0:.1f}lux")
 
     print(f"[KEEPALIVE] {' '.join(parts)}")
 

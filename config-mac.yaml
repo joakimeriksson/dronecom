@@ -1,5 +1,5 @@
 serial:
-  port: "/dev/serial0"
+  port: "/dev/tty.usbmodemL10000301"
   baudrate: 115200
   bytesize: 8
   parity: "N"
